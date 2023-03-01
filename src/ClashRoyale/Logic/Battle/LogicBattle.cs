@@ -1,0 +1,1114 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Timers;
+using ClashRoyale.Core.Cluster;
+using ClashRoyale.Extensions;
+using ClashRoyale.Files;
+using ClashRoyale.Files.CsvLogic;
+using ClashRoyale.Protocol.Messages.Server;
+using ClashRoyale.Utilities.Models.Battle.Replay;
+using ClashRoyale.Utilities.Netty;
+using DotNetty.Buffers;
+using SharpRaven.Data;
+using ClashRoyale.Logic.Home.Decks.Items;
+using ClashRoyale.Protocol;
+using ClashRoyale.Utilities.Utils;
+using ClashRoyale.Protocol.Commands.Server;
+using System.IO;
+using Newtonsoft.Json;
+
+namespace ClashRoyale.Logic.Battle
+{
+    public class LogicBattle : List<Player>
+    {
+        /// <summary>
+        ///     1v1 Battle
+        /// </summary>
+        /// <param name="isFriendly"></param>
+        /// <param name="arena"></param>
+        public LogicBattle(bool isFriendly, int arena)
+        {
+            IsFriendly = isFriendly;
+            Arena = arena;
+            Location = Csv.Tables.Get(Csv.Files.Locations)
+                           .GetData<Locations>(Csv.Tables.Get(Csv.Files.Arenas)
+                               .GetDataWithInstanceId<Arenas>(Arena - 1).PvpLocation).GetInstanceId() +
+                       1;
+            Replay.Battle.Location = 15000000 + Location;
+
+            BattleTimer.Elapsed += Tick;
+        }
+        /// <summary>
+        ///     2v2 Battle
+        /// </summary>
+        /// <param name="isFriendly"></param>
+        /// <param name="arena"></param>
+        /// <param name="players"></param>
+        public LogicBattle(bool isFriendly, int arena, IReadOnlyCollection<Player> players)
+        {
+            if (players.Count < 4)
+            {
+                Logger.Log("Not enough players to start a 2v2 battle.", GetType(), ErrorLevel.Error);
+                return;
+            }
+
+            IsFriendly = isFriendly;
+            Is2V2 = true;
+
+            Arena = arena;
+            Location = Csv.Tables.Get(Csv.Files.Locations)
+                           .GetData<Locations>(Csv.Tables.Get(Csv.Files.Arenas)
+                               .GetDataWithInstanceId<Arenas>(Arena - 1).TeamVsTeamLocation).GetInstanceId() +
+                       1;
+
+            Replay.Battle.Location = 15000000 + Location;
+
+            AddRange(players);
+
+            BattleTimer.Elapsed += Tick;
+        }
+
+        public int BattleTime => (int) DateTime.UtcNow.Subtract(StartTime).TotalSeconds * 2;
+        public int BattleSeconds => BattleTime / 2;
+
+        public bool IsRunning => BattleTimer.Enabled;
+        public bool IsReady => Count >= (Is2V2 ? 4 : 2);
+
+        public async void Start()
+        {
+            //Home.Arena.Trophies = (DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds % (86400 * 5) == 0 ? 6400 : Home.Arena.Trophies)
+            if (!IsReady) return;
+
+            try
+            {
+                NodeInfo server = null;
+                if (Resources.Configuration.UseUdp)
+                    server = Resources.NodeManager.GetServer();
+
+                var second = false;
+                foreach (var player in this)
+                {
+                    Commands.Add(player.Home.Id, new Queue<byte[]>());
+
+                    if (!second)
+                    {
+                        Replay.Battle.Avatar0 = player.Home.BattleAvatar;
+                        Replay.Battle.Deck1 = player.Home.BattleDeck;
+                        second = true;
+                    }
+                    else
+                    {
+                        Replay.Battle.Avatar1 = player.Home.BattleAvatar;
+                        Replay.Battle.Deck0 = player.Home.BattleDeck;
+                    }
+
+                    if (server != null)
+                        await new UdpConnectionInfoMessage(player.Device)
+                        {
+                            ServerPort = server.Port,
+                            ServerHost = server.Ip,
+                            SessionId = BattleId,
+                            Nonce = server.Nonce,
+                            Index = (byte)IndexOf(player)
+                        }.SendAsync();
+
+                    await new SectorStateMessage(player.Device)
+                    {
+                        Battle = this
+                    }.SendAsync();
+                }
+
+                StartTime = DateTime.UtcNow;
+
+                if (!Resources.Configuration.UseUdp || server == null)
+                    BattleTimer.Start();
+            }
+            catch (Exception)
+            {
+                Logger.Log("Couldn't start battle", GetType(), ErrorLevel.Error);
+            }
+        }
+
+        public async void Encode(IByteBuffer packet)
+        {
+            #region SectorState
+
+            const int towers = 6;
+
+            packet.WriteVInt(Location); // LocationData
+
+            packet.WriteVInt(Count); // PlayerCount
+            packet.WriteVInt(0); // NpcData
+            packet.WriteVInt(Arena); // ArenaData
+
+            var p = this[0].Home.ExpLevel - 1;
+            var e = this[1].Home.ExpLevel - 1;
+
+            foreach (var player in this)
+            {
+                packet.WriteVInt(player.Home.HighId);
+                packet.WriteVInt(player.Home.LowId);
+                packet.WriteVInt(0);
+            }
+
+            // ConstantSizeIntArray
+            {
+                packet.WriteVInt(1);
+                packet.WriteVInt(0);
+                packet.WriteVInt(0);
+
+                packet.WriteVInt(7);
+                packet.WriteVInt(0);
+                packet.WriteVInt(0);
+            }
+
+            packet.WriteBoolean(false); // IsReplay / Type?
+            packet.WriteBoolean(false); // IsEndConditionMatched
+            packet.WriteBoolean(false);
+
+            packet.WriteBoolean(false); // IsNpc
+
+            packet.WriteBoolean(false); // isBattleEndedWithTimeOut
+            packet.WriteBoolean(false);
+
+            packet.WriteBoolean(false); // hasPlayerFinishedNpcLevel
+            packet.WriteBoolean(false);
+
+            packet.WriteBoolean(false); // isInOvertime
+            packet.WriteBoolean(false); // isTournamentMode
+
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(towers);
+            packet.WriteVInt(towers);
+
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0));
+
+            // LogicGameObject::encodeComponent
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+
+            for (var i = 0; i < towers; i++)
+            {
+                packet.WriteVInt(5);
+                packet.WriteVInt(i);
+            }
+
+
+            // Player Right Princess Tower
+            packet.WriteVInt(e);
+            packet.WriteVInt(13);
+            packet.WriteVInt(14500); // X
+            packet.WriteVInt(25500); // Y
+            packet.WriteHex("00007F00C07C0002000000000000");
+
+            // Enemy Left Princess Tower
+            packet.WriteVInt(p);
+            packet.WriteVInt(13);
+            packet.WriteVInt(3500); // X
+            packet.WriteVInt(6500); // Y
+            packet.WriteHex("00007F0080040001000000000000");
+
+            // Player Left Princess Tower
+            packet.WriteVInt(e);
+            packet.WriteVInt(13);
+            packet.WriteVInt(3500); // X
+            packet.WriteVInt(25500); // Y
+            packet.WriteHex("00007F00C07C0001000000000000");
+
+            // Enemy Right Princess Tower
+            packet.WriteVInt(p);
+            packet.WriteVInt(13);
+            packet.WriteVInt(14500); // X
+            packet.WriteVInt(6500); // Y
+            packet.WriteHex("00007F0080040002000000000000");
+
+            // Enemy Crown Tower
+            packet.WriteVInt(p);
+            packet.WriteVInt(13);
+            packet.WriteVInt(9000); // X
+            packet.WriteVInt(3000); // Y
+            packet.WriteHex("00007F0080040000000000000000");
+
+            packet.WriteHex("000504077F7D7F0400050401007F7F0000");
+            packet.WriteVInt(msbeforeregenmana); // Ms before regen mana
+            packet.WriteVInt(6); // Mana Start 
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteHex("00007F7F7F7F7F7F7F7F00");
+
+            // Player Crown Tower
+            packet.WriteVInt(e);
+            packet.WriteVInt(13);
+            packet.WriteVInt(9000); // X
+            packet.WriteVInt(29000); // Y
+            packet.WriteHex("00007F00C07C0000000000000000");
+
+            packet.WriteHex("00050401047D010400040706007F7F0000");
+            packet.WriteVInt(msbeforeregenmana); // Ms before regen mana
+            packet.WriteVInt(6); // Elexir Start Enemy
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            for (var index = 0; index < 8; index++)
+                packet.WriteVInt(-1);
+
+            for (var index = 0; index < 48; index++)
+                packet.WriteVInt(0);
+
+            // LogicHitpointComponent
+            int kinghpfirstlevel = Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0).Hitpoints;
+            int princesshpfirstlevel = Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1).Hitpoints;
+            
+            int king1hpmultiplier = (p + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(74).NumberValue;
+            int king1hp = (kinghpfirstlevel * ((king1hpmultiplier / 100) + 100));
+            
+            int king2hpmultiplier = (e + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(74).NumberValue;
+            int king2hp = (kinghpfirstlevel * ((king2hpmultiplier / 100) + 100));
+            
+            int princess1hpmultiplier = (p + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(76).NumberValue;
+            int princess1hp = (princesshpfirstlevel * ((princess1hpmultiplier / 100) + 100));
+            
+            int princess2hpmultiplier = (e + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(76).NumberValue;
+            int princess2hp = (princesshpfirstlevel * ((princess2hpmultiplier / 100) + 100));
+            
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess2hp : customPrincessHitpoint); // Enemy 
+            packet.WriteVInt(0);
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess1hp : customPrincessHitpoint); // Player
+            packet.WriteVInt(0);
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess2hp : customPrincessHitpoint); // Enemy
+            packet.WriteVInt(0);
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess1hp : customPrincessHitpoint); // Player
+            packet.WriteVInt(0);
+            packet.WriteVInt(customKingHitpoint <= 0 ? king1hp : customKingHitpoint); // Player
+            packet.WriteVInt(0);
+            packet.WriteVInt(customKingHitpoint <= 0 ? king2hp : customKingHitpoint); // Enemy
+            packet.WriteVInt(0);
+
+            // LogicCharacterBuffComponent
+            for (var index = 0; index < towers; index++)
+                packet.WriteHex("00000000000000A401A401");
+                
+                packet.WriteHex("FF01");
+            if (player0deck.Length == 0)
+            {
+                this[0].Home.Deck.EncodeAttack(packet);
+            }
+            else
+            {
+                foreach (var card in player0deck)
+                {
+                    card.EncodeAttack(packet);
+                }
+            }
+
+            packet.WriteVInt(0);
+
+                packet.WriteHex("FE03");
+            if (player1deck.Length == 0)
+            {
+                this[1].Home.Deck.EncodeAttack(packet);
+            }
+            else
+            {
+                foreach (var card in player1deck)
+                {
+                    card.EncodeAttack(packet);
+                }
+            }
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+            packet.WriteVInt(6);
+            packet.WriteVInt(2);
+            packet.WriteVInt(2);
+            packet.WriteVInt(4);
+            packet.WriteVInt(2);
+            packet.WriteVInt(1);
+            packet.WriteVInt(3);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(6);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(9);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(12);
+
+            packet.WriteHex("000000F69686FF0A002A002B");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(13);
+            packet.WriteVInt(14500);
+            packet.WriteVInt(25500);
+            packet.WriteHex("00007F00C07C0002000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(13);
+            packet.WriteVInt(3500);
+            packet.WriteVInt(6500);
+            packet.WriteHex("00007F0080040001000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(13);
+            packet.WriteVInt(3500);
+            packet.WriteVInt(25500);
+            packet.WriteHex("00007F00C07C0001000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(13);
+            packet.WriteVInt(14500);
+            packet.WriteVInt(6500);
+            packet.WriteHex("00007F0080040002000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(13);
+            packet.WriteVInt(9000);
+            packet.WriteVInt(3000);
+            packet.WriteHex("00007F0080040000000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+
+            packet.WriteHex("7F000000007F7F0000000100000000007F7F7F7F7F7F7F7F");
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(13);
+            packet.WriteVInt(9000);
+            packet.WriteVInt(29000);
+            packet.WriteHex("00007F00C07C0000000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+            packet.WriteVInt(4);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(4);
+
+            packet.WriteHex(
+                "7F020203007F7F0000000500000000007F7F7F7F7F7F7F7F0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(1400);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(560);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(1400);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(560);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(960);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(2400);
+
+            for (var index = 0; index < towers; index++)
+                packet.WriteHex("00000000000000A401A401");
+
+            /**/
+            
+            #endregion 
+        }
+
+        public void EncodeDuo(IByteBuffer packet)
+        {
+            #region DuoSectorState
+
+            const int towers = 10;
+
+            packet.WriteVInt(Location); // LocationData
+
+            packet.WriteVInt(Count); // PlayerCount
+            packet.WriteVInt(0); // NpcData
+            packet.WriteVInt(Arena); // ArenaData
+
+            for (var i = 0; i < Count; i++)
+            {
+                packet.WriteVInt(this[i].Home.HighId);
+                packet.WriteVInt(this[i].Home.LowId);
+                packet.WriteVInt(0);
+            }
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(84);
+            packet.WriteVInt(84);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(towers);
+            packet.WriteVInt(towers);
+
+            // KingTower
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1));
+
+            // PrincessTower
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0));
+
+            // KingTowerMiddle
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(16));
+            packet.WriteData(Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(16));
+
+            // LogicGameObject::encodeComponent
+            packet.WriteVInt(1);
+            packet.WriteVInt(2);
+            packet.WriteVInt(3);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(2);
+            packet.WriteVInt(3);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+
+            for (var i = 0; i < towers; i++)
+            {
+                packet.WriteVInt(5);
+                packet.WriteVInt(i);
+            }
+
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(14500);
+            packet.WriteVInt(25500);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(2);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(3500);
+            packet.WriteVInt(6500);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            var home1 = this[0];
+            var home2 = this[2];
+
+            var enemy1 = this[1];
+            var enemy2 = this[3];
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(3500);
+            packet.WriteVInt(25500);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(14500);
+            packet.WriteVInt(6500);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(2);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            // Home
+            packet.WriteVInt(0);
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(11000);
+            packet.WriteVInt(3000);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(2);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+
+            // Rotation
+            packet.WriteByte(4);
+            packet.WriteByte(0);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+
+            packet.WriteByte(4);
+            for (var i = 4; i < 8; i++)
+                packet.WriteByte(i);
+
+            packet.WriteHex("007F7F00000005");
+
+            packet.WriteHex(
+                "00000000007F7F7F7F7F7F7F7F00");
+
+            // Enemy
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(11000);
+            packet.WriteVInt(29000);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(2);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+
+            // Rotation
+            packet.WriteByte(4);
+            packet.WriteByte(0);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+
+            packet.WriteByte(4);
+            for (var i = 4; i < 8; i++)
+                packet.WriteByte(i);
+
+            packet.WriteHex("007F7F00000005");
+
+            packet.WriteHex(
+                "00000000007F7F7F7F7F7F7F7F00");
+
+            // Home
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(7000);
+            packet.WriteVInt(3000);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+
+            // Rotation
+            packet.WriteByte(4);
+            packet.WriteByte(0);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+
+            packet.WriteByte(4);
+            for (var i = 4; i < 8; i++)
+                packet.WriteByte(i);
+
+            packet.WriteHex("007F7F00000005");
+
+            packet.WriteHex(
+                "00000000007F7F7F7F7F7F7F7F00");
+
+            // Home
+            packet.WriteVInt(7);
+            packet.WriteVInt(13);
+            packet.WriteVInt(7000);
+            packet.WriteVInt(29000);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(5);
+
+            // Rotation
+            packet.WriteByte(4);
+            packet.WriteByte(0);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+            packet.WriteByte(1);
+
+            packet.WriteByte(4);
+            for (var i = 4; i < 8; i++)
+                packet.WriteByte(i);
+
+            packet.WriteHex("007F7F00000005");
+
+            packet.WriteHex(
+                "00000000007F7F7F7F7F7F7F7F00");
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(9);
+            packet.WriteVInt(9000);
+            packet.WriteVInt(29000);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(0);
+            packet.WriteVInt(9);
+            packet.WriteVInt(9000);
+            packet.WriteVInt(3000);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(-1);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+            packet.WriteVInt(0);
+
+            packet.WriteHex(
+                "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+
+            // LogicHitpointComponent
+            packet.WriteVInt(235200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(235200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(235200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(235200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(452200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(452200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(452200);
+            packet.WriteVInt(0);
+
+            packet.WriteVInt(452200);
+            packet.WriteVInt(0);
+
+            for (var i = 0; i < towers; i++)
+                packet.WriteHex("00000000000000A401A401");
+
+                packet.WriteHex("FF01");
+            if (player0deck.Length == 0)
+            {
+                home1.Home.Deck.EncodeAttack(packet);
+            }
+            else
+            {
+                foreach (var card in player0deck)
+                {
+                    card.EncodeAttack(packet);
+                }
+            }
+
+            packet.WriteVInt(0);
+                packet.WriteHex("FE01");
+            if (player1deck.Length == 0)
+            {
+                home2.Home.Deck.EncodeAttack(packet);
+            }
+            else
+            {
+                foreach (var card in player1deck)
+                {
+                    card.EncodeAttack(packet);
+                }
+            }
+
+            packet.WriteVInt(0);
+                packet.WriteHex("FE03");
+            if (player2deck.Length == 0)
+            {
+                enemy1.Home.Deck.EncodeAttack(packet);
+            }
+            else
+            {
+                foreach (var card in player2deck)
+                {
+                    card.EncodeAttack(packet);
+                }
+            }
+
+            packet.WriteVInt(0);
+                packet.WriteHex("FE03");
+            if (player3deck.Length == 0)
+            {
+                enemy2.Home.Deck.EncodeAttack(packet);
+            }
+            else
+            {
+                foreach (var card in player3deck)
+                {
+                    card.EncodeAttack(packet);
+                }
+            }
+
+            packet.WriteHex("00000506070802040202010300000000000000010200001800000C000000CCE9D7B507002A002B");
+
+            #endregion 
+        }
+
+        /// <summary>
+        ///     Stops the battle
+        /// </summary>
+        public void Stop()
+        {
+            if (!Resources.Configuration.UseUdp)
+                BattleTimer.Stop();
+                
+            Replay.RandomSeed = 38;
+            Replay.EndTick = Replay.Events[Replay.Events.Count - 1].Ticks[0];
+
+            Resources.Battles.Remove(BattleId);
+            
+            //File.WriteAllText("replay.json", JsonConvert.SerializeObject(Replay));
+        }
+
+        /// <summary>
+        ///     Checks wether the battle is over or we have to send sector heartbeat (TCP only)
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="args"></param>
+        public async void Tick(object sender, ElapsedEventArgs args)
+        {
+            tickcount += 1;
+            #region Tick
+            try
+            {
+                foreach (var player in ToArray())
+                    if (player.Device.IsConnected)
+                    {
+                        if (player.Device.SecondsSinceLastCommand > 2)
+                        {
+                            if (BattleSeconds <= 10) continue;
+
+                            var rnd = new Random();
+                            var trophies = IsFriendly || Is2V2 ? 0 : 30;//rnd.Next(28, 33);
+
+                            if (!IsFriendly)
+                            {
+                                player.Home.AddCrowns((iswinner ? 3 : 0));
+                                player.Home.Arena.Trophies += (iswinner || Is2V2 ? trophies : -10);
+                                for (int i = 0; i < 200; i++)
+                                {
+                                    player.Home.Arena.AddTrophies(0);
+                                }
+                            }
+                            await new BattleResultMessage(player.Device)
+                            {
+                                TrophyReward = (iswinner ? trophies : -10)
+                            }.SendAsync();
+                            
+                            if (iswinner)
+                            {
+                                var biggerunlocktimestamp = 0; 
+                                player.Home.Gold += 50;
+                                for (int i = 0; i < 4; i++)
+                                {
+                                    if (player.Home.chestsExists[i] && biggerunlocktimestamp < player.Home.chestsUnlockTimestamp[i])
+                                    {
+                                        biggerunlocktimestamp = player.Home.chestsUnlockTimestamp[i];
+                                    }
+                                }
+                                if (biggerunlocktimestamp < TimeUtils.CurrentUnixTimestamp) biggerunlocktimestamp = TimeUtils.CurrentUnixTimestamp;
+                                for (int i = 0; i < 4; i++)
+                                {
+                                    if (!player.Home.chestsExists[i])
+                                    {
+                                        player.Home.chestsUnlockTimestamp[i] = biggerunlocktimestamp + (3600 * 5);
+                                        player.Home.chestsIsUnlocking[i] = true;
+                                        player.Home.chestsExists[i] = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            iswinner = false;
+
+                            Remove(player);
+                        }
+                        else
+                        {
+                            await new SectorHearbeatMessage(player.Device)
+                            {
+                                Turn = BattleTime,
+                                Commands = GetOwnQueue(player.Home.Id)
+                            }.SendAsync();
+                        }
+                    }
+                    else
+                    {
+                        //player.Home.blockedUntil = DateTime.UtcNow.AddMinutes(10);
+                        Remove(player);
+                    }
+
+                if (FindIndex(p => p?.Device.SecondsSinceLastCommand < 10) <= -1)
+                    Stop();
+            }
+            catch (Exception)
+            {
+                Logger.Log("BattleTick failed.", GetType(), ErrorLevel.Error);
+            }
+
+            #endregion
+        }
+
+        /// <summary>
+        ///     Remove a player from the battle and stop it when it's empty
+        /// </summary>
+        /// <param name="player"></param>
+        public new void Remove(Player player)
+        {
+            if (Count <= 1)
+                Stop();
+
+            player.Battle = null;
+
+            if (Is2V2)
+            {
+                var index = FindIndex(x => x?.Home.Id == player.Home.Id);
+                if (index <= -1) return;
+
+                this[index] = null;
+                Commands[player.Home.Id] = null;
+            }
+            else
+                base.Remove(player);
+        }
+
+        /// <summary>
+        ///     Stops the battle for a specific player (only UDP)
+        /// </summary>
+        public async void Stop(byte index)
+        {
+            #region Stop
+
+            if (Count <= index) return;
+
+            var player = this[index];
+
+            if (player == null) return;
+
+            var rnd = new Random();
+            var trophies = IsFriendly || Is2V2 ? 0 : 30;
+
+            if (!IsFriendly)
+            {
+                player.Home.AddCrowns(3);
+                player.Home.Arena.AddTrophies(trophies);
+            }
+            await new BattleResultMessage(player.Device)
+            {
+                TrophyReward = trophies
+            }.SendAsync();
+
+            player.Battle = null;
+            this[index] = null;
+
+            if (this.All(x => x == null)) Stop();
+
+            #endregion
+        }
+
+        #region CommandStorage 
+
+        public Queue<byte[]> GetEnemyQueue(long userId)
+        {
+            return Commands.FirstOrDefault(cmd => cmd.Key != userId).Value;
+        }
+
+        public Queue<byte[]> GetOwnQueue(long userId)
+        {
+            return Commands.FirstOrDefault(cmd => cmd.Key == userId).Value;
+        }
+
+        public List<Queue<byte[]>> GetOtherQueues(long userId)
+        {
+            var cmds = new List<Queue<byte[]>>();
+
+            foreach (var (key, value) in Commands)
+                if (key != userId && value != null)
+                    cmds.Add(value);
+
+            return cmds;
+        }
+
+        public Device GetEnemy(long userId)
+        {
+            return this.FirstOrDefault(p => p.Home.Id != userId)?.Device;
+        }
+
+        public Player GetTeammate(long userId)
+        {
+            var index = FindIndex(x => x?.Home.Id == userId);
+            return this[index % 2 == 0 ? index == 0 ? 2 : 0 : index == 1 ? 3 : 1];
+        }
+
+        public List<Player> GetAllOthers(long userId)
+        {
+            return this.Where(x => x?.Home.Id != userId).ToList();
+        }
+
+        #endregion
+
+        #region Objects 
+
+        public Timer BattleTimer = new Timer(500);
+        public LogicReplay Replay = new LogicReplay();
+        public Dictionary<long, Queue<byte[]>> Commands = new Dictionary<long, Queue<byte[]>>();
+        public long BattleId { get; set; }
+        private DateTime StartTime { get; set; }
+        public bool Is2V2 { get; set; }
+        public bool IsFriendly { get; set; }
+        public int Arena { get; set; }
+        public int Location { get; set; }
+        public Card[] player0deck = new Card[] {};
+        public Card[] player1deck = new Card[] {};
+        public Card[] player2deck = new Card[] {};
+        public Card[] player3deck = new Card[] {};
+        public int customKingHitpoint = 0;
+        public int customPrincessHitpoint = 0;
+        public int msbeforeregenmana = 0;
+        public bool iswinner = true;
+        public int tickcount = 0;
+
+        public static int[] KingTowerHp =
+        {
+            30000, 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000, 41000, 42000, 43000, 44000, 45000, 46000, 47000, 48000, 49000, 50000
+        };
+
+        public static int[] DuoKingTowerHp =
+        {
+            30000, 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000, 41000, 42000, 43000, 44000, 45000, 46000, 47000, 48000, 49000, 50000
+        };
+
+        public static int[] PrincessTowerHp =
+        {
+            30000, 31000, 32000, 33000, 34000, 35000, 36000, 37000, 38000, 39000, 40000, 41000, 42000, 43000, 44000, 45000, 46000, 47000, 48000, 49000, 50000
+        };
+
+        #endregion
+    }
+}

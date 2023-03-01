@@ -1,0 +1,29 @@
+﻿using System.Collections.Generic;
+using ClashRoyale.Logic;
+using ClashRoyale.Utilities.Netty;
+using ClashRoyale.Protocol;
+using ClashRoyale.Protocol.Commands.Server;
+
+namespace ClashRoyale.Protocol.Messages.Server
+{
+    public class SectorHearbeatMessage : PiranhaMessage
+    {
+        public SectorHearbeatMessage(Device device) : base(device)
+        {
+            Id = 21902;
+        }
+
+        public int Turn { get; set; }
+        public Queue<byte[]> Commands { get; set; }
+
+        public override async void Encode()
+        {
+            Writer.WriteVInt(Turn);
+            Writer.WriteVInt(0);
+
+            Writer.WriteVInt(Commands.Count);
+
+            for (var i = 0; i < Commands.Count; i++) Writer.WriteBytes(Commands.Dequeue());
+        }
+    }
+}

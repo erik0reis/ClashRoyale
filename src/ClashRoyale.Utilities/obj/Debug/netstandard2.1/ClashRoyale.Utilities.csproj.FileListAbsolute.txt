@@ -1,0 +1,9 @@
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/bin/Debug/netstandard2.1/ClashRoyale.Utilities.deps.json
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/bin/Debug/netstandard2.1/ClashRoyale.Utilities.dll
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/bin/Debug/netstandard2.1/ClashRoyale.Utilities.pdb
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Debug/netstandard2.1/ClashRoyale.Utilities.csprojAssemblyReference.cache
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Debug/netstandard2.1/ClashRoyale.Utilities.AssemblyInfoInputs.cache
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Debug/netstandard2.1/ClashRoyale.Utilities.AssemblyInfo.cs
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Debug/netstandard2.1/ClashRoyale.Utilities.csproj.CoreCompileInputs.cache
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Debug/netstandard2.1/ClashRoyale.Utilities.dll
+/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Debug/netstandard2.1/ClashRoyale.Utilities.pdb
