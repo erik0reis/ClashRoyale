@@ -15,7 +15,7 @@ var mysqlconn = mysql.createConnection(mysqloptions);
   
   
 
-const token = 'MTA3MTQ2MjgyNTE2OTUzMDk4MA.GcGF5D.qeoe7yq-hnBao-Rf151vqkBZL0MtN2zSO1zhxQ';
+const token = require("token")
 const botid = '1071462825169530980';
 
 

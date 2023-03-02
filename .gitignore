@@ -3,4 +3,5 @@
 /src/ClashRoyale/bin/*
 /src/ClashRoyale/node_modules/*
 /src/ClashRoyale/index2.js
-/bot/node_modules/*
+/bot/node_modules*
+/bot/token.js
