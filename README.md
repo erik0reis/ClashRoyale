@@ -15,7 +15,7 @@ The connect to the server, you need to modify the app
 ## How to start
 
 #### Requirements:
-  - [.NET Core SDK 3.1](https://dotnet.microsoft.com/download/dotnet-core/3.1)
+  - [.NET SDK 6.0](https://dotnet.microsoft.com/download/dotnet-core/6.0)
   - MySql Database (on Debian i suggest LAMP with PhpMyAdmin)
 
 [See the wiki for a setup tutorial](https://github.com/erik0reis/ClashRoyale/wiki/)

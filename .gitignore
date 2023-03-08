@@ -1,7 +1,10 @@
-/src/ClashRoyale/app/*
-/src/ClashRoyale/app2/*
-/src/ClashRoyale/bin/*
-/src/ClashRoyale/node_modules/*
+/src/ClashRoyale/app*
+/src/ClashRoyale/obj*
+/src/ClashRoyale.Battles/obj*
+/src/ClashRoyale.Battles/bin*
+/src/ClashRoyale/app2*
+/src/ClashRoyale/bin*
+/src/ClashRoyale/node_modules*
 /src/ClashRoyale/index2.js
 /bot/node_modules*
 /bot/token.js
