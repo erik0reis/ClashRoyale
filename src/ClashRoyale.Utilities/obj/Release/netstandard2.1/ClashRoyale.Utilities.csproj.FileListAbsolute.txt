@@ -17,3 +17,13 @@
 /run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.csproj.CoreCompileInputs.cache
 /run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.dll
 /run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.pdb
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/bin/Release/netstandard2.1/ClashRoyale.Utilities.deps.json
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/bin/Release/netstandard2.1/ClashRoyale.Utilities.dll
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/bin/Release/netstandard2.1/ClashRoyale.Utilities.pdb
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.csproj.AssemblyReference.cache
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.GeneratedMSBuildEditorConfig.editorconfig
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.AssemblyInfoInputs.cache
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.AssemblyInfo.cs
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.csproj.CoreCompileInputs.cache
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.dll
+/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/Release/netstandard2.1/ClashRoyale.Utilities.pdb

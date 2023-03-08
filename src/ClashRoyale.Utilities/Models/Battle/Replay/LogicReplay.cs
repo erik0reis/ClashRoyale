@@ -21,13 +21,14 @@ namespace ClashRoyale.Utilities.Models.Battle.Replay
         /// <param name="lowId"></param>
         /// <param name="tick"></param>
         /// <param name="param"></param>
-        public void AddEvent(int type, int highId, int lowId, int tick, int param)
+        public void AddEvent(int type, int highId, int lowId, int tick, int param, int param2)
         {
             if (Events.FindIndex(x => x.Ticks.Contains(tick)) != -1) return; // required ??
 
             var evt = new LogicBattleEvent {Type = type, HighId = highId, LowId = lowId};
             evt.Ticks.Add(tick);
             evt.Params.Add(param);
+            evt.Params.Add(param2);
             Events.Add(evt);
         }
 

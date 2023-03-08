@@ -274,39 +274,40 @@ namespace ClashRoyale.Logic.Battle
                 packet.WriteVInt(0);
 
             // LogicHitpointComponent
-            int kinghpfirstlevel = Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0).Hitpoints;
-            int princesshpfirstlevel = Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1).Hitpoints;
+            double kinghpfirstlevel = Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(0).Hitpoints;
+            double princesshpfirstlevel = Csv.Tables.Get(Csv.Files.Buildings).GetDataWithInstanceId<Buildings>(1).Hitpoints;
             
-            int king1hpmultiplier = (p + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(74).NumberValue;
-            int king1hp = (kinghpfirstlevel * ((king1hpmultiplier / 100) + 100));
+            double king1hpmultiplier = ((p) * (double)Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(74).NumberValue / 100) + 1;
+            double king1hp = (kinghpfirstlevel * king1hpmultiplier);
             
-            int king2hpmultiplier = (e + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(74).NumberValue;
-            int king2hp = (kinghpfirstlevel * ((king2hpmultiplier / 100) + 100));
+            double king2hpmultiplier = ((e) * (double)Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(74).NumberValue / 100) + 1;
+            double king2hp = (kinghpfirstlevel * king2hpmultiplier);
             
-            int princess1hpmultiplier = (p + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(76).NumberValue;
-            int princess1hp = (princesshpfirstlevel * ((princess1hpmultiplier / 100) + 100));
+            double princess1hpmultiplier = ((p) * (double)Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(76).NumberValue / 100) + 1;
+            double princess1hp = (princesshpfirstlevel * princess1hpmultiplier);
             
-            int princess2hpmultiplier = (e + 1) * Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(76).NumberValue;
-            int princess2hp = (princesshpfirstlevel * ((princess2hpmultiplier / 100) + 100));
+            double princess2hpmultiplier = ((e) * (double)Csv.Tables.Get(Csv.Files.Globals).GetDataWithInstanceId<Globals>(76).NumberValue / 100) + 1;
+            double princess2hp = (princesshpfirstlevel * princess2hpmultiplier);
             
-            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess2hp : customPrincessHitpoint); // Enemy 
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? (int)20000 : customPrincessHitpoint); // Enemy 
             packet.WriteVInt(0);
-            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess1hp : customPrincessHitpoint); // Player
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? (int)20000 : customPrincessHitpoint); // Player
             packet.WriteVInt(0);
-            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess2hp : customPrincessHitpoint); // Enemy
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? (int)20000 : customPrincessHitpoint); // Enemy
             packet.WriteVInt(0);
-            packet.WriteVInt(customPrincessHitpoint <= 0 ? princess1hp : customPrincessHitpoint); // Player
+            packet.WriteVInt(customPrincessHitpoint <= 0 ? (int)20000 : customPrincessHitpoint); // Player
             packet.WriteVInt(0);
-            packet.WriteVInt(customKingHitpoint <= 0 ? king1hp : customKingHitpoint); // Player
+            packet.WriteVInt(customKingHitpoint <= 0 ? (int)30000 : customKingHitpoint); // Player
             packet.WriteVInt(0);
-            packet.WriteVInt(customKingHitpoint <= 0 ? king2hp : customKingHitpoint); // Enemy
+            packet.WriteVInt(customKingHitpoint <= 0 ? (int)30000 : customKingHitpoint); // Enemy
             packet.WriteVInt(0);
 
             // LogicCharacterBuffComponent
             for (var index = 0; index < towers; index++)
                 packet.WriteHex("00000000000000A401A401");
                 
-                packet.WriteHex("FF01");
+            packet.WriteByte(-1);
+            packet.WriteByte(1);
             if (player0deck.Length == 0)
             {
                 this[0].Home.Deck.EncodeAttack(packet);
@@ -321,7 +322,8 @@ namespace ClashRoyale.Logic.Battle
 
             packet.WriteVInt(0);
 
-                packet.WriteHex("FE03");
+            packet.WriteByte(-2);
+            packet.WriteByte(3);
             if (player1deck.Length == 0)
             {
                 this[1].Home.Deck.EncodeAttack(packet);
@@ -883,7 +885,7 @@ namespace ClashRoyale.Logic.Battle
 
             Resources.Battles.Remove(BattleId);
             
-            //File.WriteAllText("replay.json", JsonConvert.SerializeObject(Replay));
+            File.WriteAllText("replay.json", JsonConvert.SerializeObject(Replay));
         }
 
         /// <summary>
@@ -911,6 +913,10 @@ namespace ClashRoyale.Logic.Battle
                             {
                                 player.Home.AddCrowns((iswinner ? 3 : 0));
                                 player.Home.Arena.Trophies += (iswinner || Is2V2 ? trophies : -10);
+                                if (player.Home.Arena.Trophies < -50)
+                                {
+                                    player.Home.Arena.Trophies = -50;
+                                }
                                 for (int i = 0; i < 200; i++)
                                 {
                                     player.Home.Arena.AddTrophies(0);

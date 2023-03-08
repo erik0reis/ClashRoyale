@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj": {}
+    "/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj": {}
   },
   "projects": {
-    "/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj": {
+    "/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj",
+        "projectUniqueName": "/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj",
         "projectName": "ClashRoyale.Utilities",
-        "projectPath": "/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj",
-        "packagesPath": "/home/admin/.nuget/packages/",
-        "outputPath": "/run/media/admin/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/",
+        "projectPath": "/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/ClashRoyale.Utilities.csproj",
+        "packagesPath": "/home/erikreis/.nuget/packages/",
+        "outputPath": "/run/media/erikreis/0A3AF16E3AF15763/ClashRoyale/src/ClashRoyale.Utilities/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/home/admin/.nuget/NuGet/NuGet.Config"
+          "/home/erikreis/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "netstandard2.1"
@@ -24,6 +24,7 @@
         },
         "frameworks": {
           "netstandard2.1": {
+            "targetAlias": "netstandard2.1",
             "projectReferences": {}
           }
         },
@@ -35,6 +36,7 @@
       },
       "frameworks": {
         "netstandard2.1": {
+          "targetAlias": "netstandard2.1",
           "dependencies": {
             "DotNetty.Buffers": {
               "target": "Package",
@@ -51,7 +53,8 @@
             "net47",
             "net471",
             "net472",
-            "net48"
+            "net48",
+            "net481"
           ],
           "assetTargetFallback": true,
           "warn": true,
@@ -60,7 +63,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/lib64/dotnet/sdk/3.1.424/RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/lib64/dotnet/sdk/7.0.103/RuntimeIdentifierGraph.json"
         }
       }
     }

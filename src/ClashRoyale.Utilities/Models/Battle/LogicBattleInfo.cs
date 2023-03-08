@@ -6,6 +6,9 @@ namespace ClashRoyale.Utilities.Models.Battle
     public class LogicBattleInfo
     {
         [JsonProperty("gmt")] public int Gmt = 1;
+        [JsonProperty("plt")] public int Plt = 1;
+        [JsonProperty("t1s")] public int T1s = 0;
+        [JsonProperty("t2s")] public int T2s = 0;
         [JsonProperty("gamemode")] public int Gamemode = 72000006;
         [JsonProperty("arena")] public int Arena = 54000012;
         [JsonProperty("location")] public int Location = 15000013;

@@ -46,7 +46,7 @@ namespace ClashRoyale.Protocol.Messages.Client.Alliance
 
                 switch (cmdType)
                 {
-                    /*case "/max":
+                    case "/max":
                     {
                         var deck = Device.Player.Home.Deck;
 
@@ -114,7 +114,7 @@ namespace ClashRoyale.Protocol.Messages.Client.Alliance
                         Device.Player.Home.Gold += cmdValue;
                         Device.Disconnect();
                         break;
-                    }*/
+                    }
 
                     case "/status":
                     {

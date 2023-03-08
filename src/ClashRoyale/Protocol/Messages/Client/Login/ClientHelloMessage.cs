@@ -41,6 +41,12 @@ namespace ClashRoyale.Protocol.Messages.Client.Login
 
         public override async void Process()
         {
+            // clash royale 2.0.1
+            /*
+            await new ServerHelloMessage(Device).SendAsync();
+            return; */
+
+            //clash royale 1.9.2
             if (Resources.Configuration.UseContentPatch)
             {
                 if (FingerprintSha != Resources.Fingerprint.Sha)
@@ -56,8 +62,6 @@ namespace ClashRoyale.Protocol.Messages.Client.Login
                 }
             }
             
-            await new ServerHelloMessage(Device).SendAsync();
-            return;
             await new LoginFailedMessage(Device)
             {
                 Reason =

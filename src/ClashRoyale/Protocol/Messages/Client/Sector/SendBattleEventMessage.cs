@@ -143,7 +143,7 @@ namespace ClashRoyale.Protocol.Messages.Client.Sector
                     }
                 }
 
-                battle.Replay.AddEvent(Type, Device.Player.Home.HighId, Device.Player.Home.LowId, Tick, Value1);
+                battle.Replay.AddEvent(Type, Device.Player.Home.HighId, Device.Player.Home.LowId, Tick, Value1, Value2);
             }
         }
     }
